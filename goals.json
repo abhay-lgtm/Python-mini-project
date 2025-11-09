@@ -1,0 +1,12 @@
+[
+    {
+        "id": 1,
+        "name": "Buy watch",
+        "target_amount": 1000.0,
+        "current_amount": 0,
+        "deadline": null,
+        "created_date": "2025-11-09",
+        "status": "active",
+        "lock_amount": true
+    }
+]

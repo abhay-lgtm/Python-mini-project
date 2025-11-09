@@ -117,13 +117,27 @@ def delete_expense(expense_index):
     Returns:
         bool: True if deleted, False if not found
     """
+    from balance_manager import add_to_balance
+
     expenses = load_expenses()
-    
+
     if 0 <= expense_index < len(expenses):
-        deleted_expense = expenses.pop(expense_index)
+        deleted_expense = expenses[expense_index]
+        amount = deleted_expense.get("amount", 0)
+
+        # First, attempt to restore amount to balance
+        try:
+            # add_to_balance accepts numeric amounts
+            add_to_balance(amount)
+        except Exception as e:
+            # Do not remove the expense if balance couldn't be adjusted
+            raise RuntimeError(f"Failed to restore balance when deleting expense: {e}")
+
+        # If balance restored successfully, remove expense and save
+        expenses.pop(expense_index)
         save_expenses(expenses)
         return True
-    
+
     return False
 
 def edit_expense(expense_index, category=None, amount=None, note=None):
@@ -137,19 +151,39 @@ def edit_expense(expense_index, category=None, amount=None, note=None):
     Returns:
         bool: True if edited, False if not found
     """
+    from balance_manager import add_to_balance, subtract_from_balance
+
     expenses = load_expenses()
-    
+
     if 0 <= expense_index < len(expenses):
+        current = expenses[expense_index]
+        old_amount = current.get("amount", 0)
+
+        # Adjust balance if amount is changing
+        if amount is not None and amount != old_amount:
+            try:
+                # If new amount is greater, subtract the extra from balance
+                if amount > old_amount:
+                    subtract_from_balance(amount - old_amount)
+                # If new amount is smaller, add the difference back
+                else:
+                    add_to_balance(old_amount - amount)
+            except Exception as e:
+                # Do not persist changes if balance adjustment fails
+                raise RuntimeError(f"Failed to adjust balance for edited expense: {e}")
+
+            # Update the amount only after successful balance adjustment
+            expenses[expense_index]["amount"] = amount
+
+        # Update other fields
         if category is not None:
             expenses[expense_index]["category"] = category
-        if amount is not None:
-            expenses[expense_index]["amount"] = amount
         if note is not None:
             expenses[expense_index]["note"] = note
-        
+
         save_expenses(expenses)
         return True
-    
+
     return False
 
 def get_categories():
