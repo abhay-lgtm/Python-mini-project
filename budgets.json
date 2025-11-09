@@ -1,1 +1,13 @@
-[]
+[
+    {
+        "id": 1,
+        "category": "Food & Dining",
+        "amount": 5000.0,
+        "period": "month",
+        "start_date": "2025-11-09",
+        "end_date": "2025-12-09",
+        "alert_threshold": 80.0,
+        "status": "active",
+        "created_date": "2025-11-09"
+    }
+]

@@ -160,12 +160,32 @@ def delete_goal(goal_id):
     """
     goals = load_goals()
     initial_length = len(goals)
-    goals = [g for g in goals if g["id"] != goal_id]
-    
+
+    # Support deleting by numeric id or by name string for GUI convenience
+    # If a string is passed that represents an integer, convert it.
+    match_by = None
+    try:
+        # If goal_id is an int or a numeric string, treat as id
+        if isinstance(goal_id, str) and goal_id.isdigit():
+            goal_id_int = int(goal_id)
+            match_by = ("id", goal_id_int)
+        elif isinstance(goal_id, int):
+            match_by = ("id", goal_id)
+        elif isinstance(goal_id, str):
+            # treat as name
+            match_by = ("name", goal_id)
+    except Exception:
+        match_by = ("id", goal_id)
+
+    if match_by[0] == "id":
+        goals = [g for g in goals if g.get("id") != match_by[1]]
+    else:
+        goals = [g for g in goals if g.get("name") != match_by[1]]
+
     if len(goals) < initial_length:
         save_goals(goals)
         return True
-    
+
     return False
 
 def check_goal_alerts():

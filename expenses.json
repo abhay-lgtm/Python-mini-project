@@ -4,5 +4,23 @@
         "category": "Transportation",
         "amount": 30.0,
         "note": "bus fare"
+    },
+    {
+        "date": "2025-11-09",
+        "category": "Food & Dining",
+        "amount": 150.0,
+        "note": "thursday dinner"
+    },
+    {
+        "date": "2025-11-09",
+        "category": "Food & Dining",
+        "amount": 1000.0,
+        "note": "friday dinner"
+    },
+    {
+        "date": "2025-11-09",
+        "category": "Food & Dining",
+        "amount": 1250.0,
+        "note": "food"
     }
 ]

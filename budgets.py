@@ -225,13 +225,33 @@ def delete_budget(budget_id):
     """
     Delete a budget
     Args:
-        budget_id: ID of the budget to delete
+        budget_id: ID of the budget to delete (int or string)
     Returns:
         bool: True if deleted, False if not found
     """
     budgets = load_budgets()
     initial_length = len(budgets)
-    budgets = [b for b in budgets if b["id"] != budget_id]
+    
+    # Support deleting by numeric id or by category name string for GUI convenience
+    # If a string is passed that represents an integer, convert it.
+    match_by = None
+    try:
+        # If budget_id is an int or a numeric string, treat as id
+        if isinstance(budget_id, str) and budget_id.isdigit():
+            budget_id_int = int(budget_id)
+            match_by = ("id", budget_id_int)
+        elif isinstance(budget_id, int):
+            match_by = ("id", budget_id)
+        elif isinstance(budget_id, str):
+            # treat as category name
+            match_by = ("category", budget_id)
+    except Exception:
+        match_by = ("id", budget_id)
+    
+    if match_by[0] == "id":
+        budgets = [b for b in budgets if b.get("id") != match_by[1]]
+    else:
+        budgets = [b for b in budgets if b.get("category") != match_by[1]]
     
     if len(budgets) < initial_length:
         save_budgets(budgets)

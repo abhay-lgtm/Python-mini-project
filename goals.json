@@ -1,12 +1,33 @@
 [
     {
         "id": 1,
-        "name": "Buy watch",
+        "name": "Buying a pair of shoes",
         "target_amount": 1000.0,
-        "current_amount": 0,
-        "deadline": null,
+        "current_amount": 500.0,
+        "deadline": "",
         "created_date": "2025-11-09",
         "status": "active",
         "lock_amount": true
+    },
+    {
+        "id": 2,
+        "name": "Test - Save for Laptop",
+        "target_amount": 50000,
+        "current_amount": 50000,
+        "deadline": null,
+        "created_date": "2025-11-09",
+        "status": "completed",
+        "lock_amount": false,
+        "completed_date": "2025-11-09"
+    },
+    {
+        "id": 3,
+        "name": "Test - Save for Gaming PC",
+        "target_amount": 50000,
+        "current_amount": 35000.0,
+        "deadline": null,
+        "created_date": "2025-11-09",
+        "status": "active",
+        "lock_amount": false
     }
 ]

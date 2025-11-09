@@ -313,13 +313,36 @@ def show_goals_window():
     goals_frame = tk.Frame(window, bg="#ffffff", relief="ridge", bd=2)
     goals_frame.pack(pady=10, padx=20, fill="both", expand=True)
     
-    goals_tree = ttk.Treeview(goals_frame, columns=("name", "target", "current", "progress"), 
+    goals_tree = ttk.Treeview(goals_frame, columns=("id", "name", "target", "current", "progress"), 
                               show="headings", height=10)
+    goals_tree.heading("id", text="ID")
     goals_tree.heading("name", text="Goal Name")
     goals_tree.heading("target", text="Target (₹)")
     goals_tree.heading("current", text="Current (₹)")
     goals_tree.heading("progress", text="Progress %")
+    
+    # Hide ID column but keep it for reference
+    goals_tree.column("id", width=0, stretch=False)
+    
     goals_tree.pack(fill="both", expand=True, padx=5, pady=5)
+    
+    # Context menu for right-click delete
+    goal_context_menu = tk.Menu(goals_tree, tearoff=0)
+    goal_context_menu.add_command(label="Add Progress", command=lambda: add_progress_to_goal())
+    goal_context_menu.add_separator()
+    goal_context_menu.add_command(label="Delete Goal", command=lambda: delete_selected_goal())
+    
+    def show_goal_context_menu(event):
+        try:
+            # Select the item under cursor
+            item = goals_tree.identify_row(event.y)
+            if item:
+                goals_tree.selection_set(item)
+                goal_context_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            goal_context_menu.grab_release()
+    
+    goals_tree.bind("<Button-3>", show_goal_context_menu)  # Right-click
     
     def refresh_goals():
         for item in goals_tree.get_children():
@@ -329,6 +352,7 @@ def show_goals_window():
         for goal in goals:
             progress = get_goal_progress(goal["id"])
             goals_tree.insert("", "end", values=(
+                goal["id"],  # Store ID (hidden)
                 goal["name"], 
                 f"₹{goal['target_amount']:.2f}", 
                 f"₹{goal['current_amount']:.2f}",
@@ -384,16 +408,147 @@ def show_goals_window():
         tk.Button(dialog, text="Add Goal", command=save_goal, 
                  bg="#4caf50", fg="white", padx=20).grid(row=4, column=0, columnspan=2, pady=20)
     
+    def delete_selected_goal():
+        """Delete the selected goal"""
+        selected = goals_tree.selection()
+        if not selected:
+            messagebox.showwarning("No Selection", "Please select a goal to delete.")
+            return
+        
+        # Get the goal details
+        item = goals_tree.item(selected[0])
+        goal_id = item["values"][0]  # ID is first value (hidden column)
+        goal_name = item["values"][1]  # Name is second value
+        
+        # Confirm deletion
+        if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete the goal '{goal_name}'?"):
+            if delete_goal(goal_id):
+                messagebox.showinfo("Success", f"Goal '{goal_name}' deleted successfully!")
+                refresh_goals()
+            else:
+                messagebox.showerror("Error", "Failed to delete goal.")
+    
+    def add_progress_to_goal():
+        """Add money toward a selected goal"""
+        selected = goals_tree.selection()
+        if not selected:
+            messagebox.showwarning("No Selection", "Please select a goal to add progress to.")
+            return
+        
+        # Get the goal details
+        item = goals_tree.item(selected[0])
+        goal_id = item["values"][0]  # ID is first value (hidden column)
+        goal_name = item["values"][1]  # Name is second value
+        current_amount = float(item["values"][3].replace("₹", ""))  # Current amount
+        target_amount = float(item["values"][2].replace("₹", ""))  # Target amount
+        remaining = target_amount - current_amount
+        
+        # Create dialog to add amount
+        dialog = tk.Toplevel(window)
+        dialog.title(f"Add Progress to '{goal_name}'")
+        dialog.geometry("400x320")
+        dialog.config(bg="#f5f5f5")
+        dialog.transient(window)
+        dialog.grab_set()
+        
+        # Display goal info
+        tk.Label(dialog, text=f"Goal: {goal_name}", font=("Arial", 11, "bold"),
+                bg="#f5f5f5").pack(pady=5)
+        tk.Label(dialog, text=f"Current: ₹{current_amount:.2f} / ₹{target_amount:.2f}",
+                bg="#f5f5f5").pack(pady=2)
+        tk.Label(dialog, text=f"Remaining: ₹{remaining:.2f}",
+                bg="#f5f5f5", fg="#ff9800").pack(pady=2)
+        
+        # Show current balance
+        current_balance = get_balance()
+        tk.Label(dialog, text=f"Available Balance: ₹{current_balance:.2f}",
+                bg="#f5f5f5", fg="#2196f3", font=("Arial", 9)).pack(pady=2)
+        
+        tk.Label(dialog, text="Amount to Add (₹):", bg="#f5f5f5",
+                font=("Arial", 10, "bold")).pack(pady=10)
+        amount_entry = tk.Entry(dialog, width=30, font=("Arial", 11))
+        amount_entry.pack(pady=5)
+        amount_entry.focus()
+        
+        # Checkbox to deduct from balance
+        deduct_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(dialog, text="Deduct from balance", variable=deduct_var,
+                      bg="#f5f5f5", font=("Arial", 9)).pack(pady=5)
+        
+        def save_progress():
+            try:
+                amount = float(amount_entry.get())
+                
+                if amount <= 0:
+                    messagebox.showerror("Error", "Amount must be positive!")
+                    return
+                
+                # Check if we should deduct from balance
+                if deduct_var.get():
+                    current_balance = get_balance()
+                    if amount > current_balance:
+                        messagebox.showerror("Insufficient Balance", 
+                                           f"You only have ₹{current_balance:.2f} in your balance.\n"
+                                           f"You're trying to add ₹{amount:.2f} to the goal.")
+                        return
+                    
+                    # Deduct from balance
+                    try:
+                        from balance_manager import subtract_from_balance
+                        subtract_from_balance(amount)
+                    except ValueError as e:
+                        messagebox.showerror("Error", f"Cannot deduct from balance: {str(e)}")
+                        return
+                
+                # Update goal progress
+                updated_goal = update_goal_progress(goal_id, amount)
+                
+                if updated_goal:
+                    new_current = updated_goal["current_amount"]
+                    percentage = (new_current / target_amount * 100)
+                    
+                    # Build success message
+                    balance_msg = f"(deducted from balance)" if deduct_var.get() else "(balance unchanged)"
+                    
+                    if updated_goal["status"] == "completed":
+                        messagebox.showinfo("Goal Completed! 🎉", 
+                                          f"Congratulations! You've reached your goal '{goal_name}'!\n"
+                                          f"Total saved: ₹{new_current:.2f}\n"
+                                          f"Amount added: ₹{amount:.2f} {balance_msg}")
+                    else:
+                        messagebox.showinfo("Progress Added!", 
+                                          f"Added ₹{amount:.2f} to '{goal_name}' {balance_msg}\n"
+                                          f"New total: ₹{new_current:.2f} ({percentage:.1f}%)\n"
+                                          f"Remaining: ₹{target_amount - new_current:.2f}")
+                    
+                    dialog.destroy()
+                    refresh_goals()
+                    refresh_data()  # Refresh main window to update balance display
+                else:
+                    messagebox.showerror("Error", "Failed to update goal progress.")
+            except ValueError:
+                messagebox.showerror("Error", "Please enter a valid amount!")
+        
+        tk.Button(dialog, text="Add Progress", command=save_progress, 
+                 bg="#ff9800", fg="white", padx=20, pady=8,
+                 font=("Arial", 10, "bold")).pack(pady=20)
+        tk.Button(dialog, text="Cancel", command=dialog.destroy, 
+                 bg="#757575", fg="white", padx=20).pack()
+    
     # Buttons
     btn_frame = tk.Frame(window, bg="#f5f5f5")
     btn_frame.pack(pady=10)
     
     tk.Button(btn_frame, text="Add New Goal", command=add_goal_gui, 
              bg="#4caf50", fg="white", padx=15).pack(side="left", padx=5)
+    tk.Button(btn_frame, text="Add Progress", command=add_progress_to_goal, 
+             bg="#ff9800", fg="white", padx=15).pack(side="left", padx=5)
+    tk.Button(btn_frame, text="Delete Selected", command=delete_selected_goal, 
+             bg="#f44336", fg="white", padx=15).pack(side="left", padx=5)
     tk.Button(btn_frame, text="Refresh", command=refresh_goals, 
              bg="#2196f3", fg="white", padx=15).pack(side="left", padx=5)
     tk.Button(btn_frame, text="Close", command=window.destroy, 
-             bg="#f44336", fg="white", padx=15).pack(side="left", padx=5)
+             bg="#757575", fg="white", padx=15).pack(side="left", padx=5)
     
     refresh_goals()
 
@@ -401,7 +556,7 @@ def show_budgets_window():
     """Display budgets management window"""
     window = tk.Toplevel(root)
     window.title("Budget Management")
-    window.geometry("700x500")
+    window.geometry("800x500")
     window.config(bg="#f5f5f5")
     
     tk.Label(window, text="💵 Your Budgets", font=("Arial", 16, "bold"), 
@@ -414,14 +569,42 @@ def show_budgets_window():
     budgets_frame = tk.Frame(window, bg="#ffffff", relief="ridge", bd=2)
     budgets_frame.pack(pady=10, padx=20, fill="both", expand=True)
     
-    budgets_tree = ttk.Treeview(budgets_frame, columns=("category", "period", "budget", "spent", "status"), 
+    budgets_tree = ttk.Treeview(budgets_frame, columns=("id", "category", "period", "budget", "spent", "remaining", "status"), 
                                 show="headings", height=10)
+    budgets_tree.heading("id", text="ID")
     budgets_tree.heading("category", text="Category")
     budgets_tree.heading("period", text="Period")
     budgets_tree.heading("budget", text="Budget (₹)")
     budgets_tree.heading("spent", text="Spent (₹)")
+    budgets_tree.heading("remaining", text="Remaining (₹)")
     budgets_tree.heading("status", text="Status")
+    
+    # Hide ID column but keep it for reference
+    budgets_tree.column("id", width=0, stretch=False)
+    budgets_tree.column("category", width=120, anchor="w")
+    budgets_tree.column("period", width=70, anchor="center")
+    budgets_tree.column("budget", width=100, anchor="e")
+    budgets_tree.column("spent", width=100, anchor="e")
+    budgets_tree.column("remaining", width=100, anchor="e")
+    budgets_tree.column("status", width=150, anchor="center")
+    
     budgets_tree.pack(fill="both", expand=True, padx=5, pady=5)
+    
+    # Context menu for right-click delete
+    budget_context_menu = tk.Menu(budgets_tree, tearoff=0)
+    budget_context_menu.add_command(label="Delete Budget", command=lambda: delete_selected_budget())
+    
+    def show_budget_context_menu(event):
+        try:
+            # Select the item under cursor
+            item = budgets_tree.identify_row(event.y)
+            if item:
+                budgets_tree.selection_set(item)
+                budget_context_menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            budget_context_menu.grab_release()
+    
+    budgets_tree.bind("<Button-3>", show_budget_context_menu)  # Right-click
     
     def refresh_budgets():
         for item in budgets_tree.get_children():
@@ -431,10 +614,12 @@ def show_budgets_window():
         for budget in budgets:
             status = get_budget_status(budget)
             budgets_tree.insert("", "end", values=(
+                budget["id"],  # Store ID (hidden)
                 budget["category"],
                 budget["period"],
                 f"₹{budget['amount']:.2f}",
                 f"₹{status['spent']:.2f}",
+                f"₹{status['remaining']:.2f}",
                 f"{status['percentage']:.1f}% ({status['status_level']})"
             ))
     
@@ -488,15 +673,37 @@ def show_budgets_window():
         tk.Button(dialog, text="Add Budget", command=save_budget, 
                  bg="#4caf50", fg="white", padx=20).grid(row=5, column=0, columnspan=2, pady=20)
     
+    def delete_selected_budget():
+        """Delete the selected budget"""
+        selected = budgets_tree.selection()
+        if not selected:
+            messagebox.showwarning("No Selection", "Please select a budget to delete.")
+            return
+        
+        # Get the budget details
+        item = budgets_tree.item(selected[0])
+        budget_id = item["values"][0]  # ID is first value (hidden column)
+        budget_category = item["values"][1]  # Category is second value
+        
+        # Confirm deletion
+        if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete the '{budget_category}' budget?"):
+            if delete_budget(budget_id):
+                messagebox.showinfo("Success", f"'{budget_category}' budget deleted successfully!")
+                refresh_budgets()
+            else:
+                messagebox.showerror("Error", "Failed to delete budget.")
+    
     btn_frame = tk.Frame(window, bg="#f5f5f5")
     btn_frame.pack(pady=10)
     
     tk.Button(btn_frame, text="Add New Budget", command=add_budget_gui, 
              bg="#4caf50", fg="white", padx=15).pack(side="left", padx=5)
+    tk.Button(btn_frame, text="Delete Selected", command=delete_selected_budget, 
+             bg="#f44336", fg="white", padx=15).pack(side="left", padx=5)
     tk.Button(btn_frame, text="Refresh", command=refresh_budgets, 
              bg="#2196f3", fg="white", padx=15).pack(side="left", padx=5)
     tk.Button(btn_frame, text="Close", command=window.destroy, 
-             bg="#f44336", fg="white", padx=15).pack(side="left", padx=5)
+             bg="#757575", fg="white", padx=15).pack(side="left", padx=5)
     
     refresh_budgets()
 
